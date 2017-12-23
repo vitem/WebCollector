@@ -18,16 +18,21 @@
 package cn.edu.hfut.dmic.webcollector.model;
 
 import cn.edu.hfut.dmic.webcollector.util.CrawlDatumFormater;
+import cn.edu.hfut.dmic.webcollector.util.GsonUtils;
+import com.google.gson.Gson;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonNull;
+import com.google.gson.JsonObject;
 
 import java.io.Serializable;
-import java.util.HashMap;
+import java.util.regex.Pattern;
 
 /**
  * 爬取任务的数据结构
  *
  * @author hu
  */
-public class CrawlDatum implements Serializable {
+public class CrawlDatum implements Serializable, MetaGetter, MetaSetter<CrawlDatum> {
 
     public final static int STATUS_DB_UNEXECUTED = 0;
     public final static int STATUS_DB_FAILED = 1;
@@ -51,7 +56,7 @@ public class CrawlDatum implements Serializable {
      * 附加信息并不是为了持久化数据，而是为了能够更好地定制爬取任务
      * 在visit方法中，可以通过page.getMetaData()方法来访问CrawlDatum中的metaData
      */
-    private HashMap<String, String> metaData = new HashMap<String, String>();
+    private JsonObject metaData = new JsonObject();
 
     public CrawlDatum() {
     }
@@ -72,6 +77,17 @@ public class CrawlDatum implements Serializable {
             return type.equals(type());
         }
     }
+    
+        /**
+     * 判断当前Page的URL是否和输入正则匹配
+     *
+     * @param urlRegex
+     * @return
+     */
+    public boolean matchUrl(String urlRegex) {
+        return Pattern.matches(urlRegex, url());
+    }
+
 
     public CrawlDatum(String url, String[] metas) throws Exception {
         this(url);
@@ -150,35 +166,64 @@ public class CrawlDatum implements Serializable {
         this.status = status;
     }
 
-    public HashMap<String, String> getMetaData() {
+
+
+//
+//    public void meta(Document metaData) {
+//        this.metaData = metaData;
+//    }
+//
+//
+//
+//    public CrawlDatum meta(String key,String value){
+//        this.metaData.put(key, value);
+//        return this;
+//    }
+
+    @Override
+    public JsonObject meta() {
         return metaData;
     }
-
-    public void setMetaData(HashMap<String, String> metaData) {
-        this.metaData = metaData;
-    }
-
-
-
-    public CrawlDatum meta(String key,String value){
-        this.metaData.put(key, value);
-        return this;
-    }
-
+    @Override
     public String meta(String key){
-        return this.metaData.get(key);
+        JsonElement value = metaData.get(key);
+        return (value==null || (value instanceof JsonNull))?null:value.getAsString();
     }
 
-    @Deprecated
-    public CrawlDatum putMetaData(String key,String value){
-        return meta(key,value);
+    @Override
+    public int metaAsInt(String key){
+        return metaData.get(key).getAsInt();
     }
 
-    @Deprecated
-    public String getMetaData(String key){
-        return meta(key);
+    @Override
+    public boolean metaAsBoolean(String key) {
+        return metaData.get(key).getAsBoolean();
     }
 
+    @Override
+    public double metaAsDouble(String key) {
+        return metaData.get(key).getAsDouble();
+    }
+
+    @Override
+    public long metaAsLong(String key) {
+        return metaData.get(key).getAsLong();
+    }
+
+
+//    @Deprecated
+//    public CrawlDatum putMetaData(String key,String value){
+//        return meta(key,value);
+//    }
+//
+//    @Deprecated
+//    public String getMetaData(String key){
+//        return meta(key);
+//    }
+
+    public String briefInfo(){
+        return String.format("CrawlDatum: %s (URL: %s)",key(),url());
+    }
     
      public String key() {
         if (key == null) {
@@ -194,27 +239,49 @@ public class CrawlDatum implements Serializable {
     }
 
 
-     /**
-      * 
-      * @deprecated 使用key()代替
-      */
-    @Deprecated
-    public String getKey() {
-       return key();
-    }
 
-    /**
-     * @deprecated 使用key(String key)代替
-     */
-    @Deprecated
-    public CrawlDatum setKey(String key) {
-        return key(key);
-    }
 
 
     @Override
     public String toString() {
         return CrawlDatumFormater.datumToString(this);
+    }
+
+
+    @Override
+    public CrawlDatum meta(JsonObject metaData) {
+        this.metaData = metaData;
+        return this;
+    }
+
+    @Override
+    public CrawlDatum meta(String key, String value) {
+        metaData.addProperty(key, value);
+        return this;
+    }
+
+    @Override
+    public CrawlDatum meta(String key, int value) {
+        metaData.addProperty(key, value);
+        return this;
+    }
+
+    @Override
+    public CrawlDatum meta(String key, boolean value) {
+        metaData.addProperty(key, value);
+        return this;
+    }
+
+    @Override
+    public CrawlDatum meta(String key, double value) {
+        metaData.addProperty(key, value);
+        return this;
+    }
+
+    @Override
+    public CrawlDatum meta(String key, long value) {
+        metaData.addProperty(key, value);
+        return this;
     }
 
 

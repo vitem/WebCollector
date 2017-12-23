@@ -21,10 +21,9 @@ import cn.edu.hfut.dmic.webcollector.model.CrawlDatum;
 import cn.edu.hfut.dmic.webcollector.model.CrawlDatums;
 import cn.edu.hfut.dmic.webcollector.model.Page;
 import cn.edu.hfut.dmic.webcollector.net.HttpRequest;
-import cn.edu.hfut.dmic.webcollector.net.HttpResponse;
 import cn.edu.hfut.dmic.webcollector.plugin.berkeley.BreadthCrawler;
+import com.google.gson.JsonObject;
 
-import org.json.JSONObject;
 
 /**
  * 本教程演示了如何自定义http请求
@@ -60,7 +59,7 @@ public class DemoPostCrawler extends BreadthCrawler {
     }
 
     @Override
-    public HttpResponse getResponse(CrawlDatum crawlDatum) throws Exception {
+    public Page getResponse(CrawlDatum crawlDatum) throws Exception {
         HttpRequest request = new HttpRequest(crawlDatum.url());
 
         request.setMethod(crawlDatum.meta("method"));
@@ -68,7 +67,7 @@ public class DemoPostCrawler extends BreadthCrawler {
         if (outputData != null) {
             request.setOutputData(outputData.getBytes("utf-8"));
         }
-        return request.response();
+        return request.responsePage();
         /*
         //通过下面方式可以设置Cookie、User-Agent等http请求头信息
         request.setCookie("xxxxxxxxxxxxxx");
@@ -79,9 +78,8 @@ public class DemoPostCrawler extends BreadthCrawler {
 
     @Override
     public void visit(Page page, CrawlDatums next) {
-        String jsonStr = page.html();
-        JSONObject json = new JSONObject(jsonStr);
-        System.out.println("JSON信息：" + json);
+        JsonObject jsonObject = page.jsonObject();
+        System.out.println("JSON信息：" + jsonObject);
     }
 
     /**

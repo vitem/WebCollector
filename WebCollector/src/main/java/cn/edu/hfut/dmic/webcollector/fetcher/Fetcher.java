@@ -19,9 +19,10 @@ package cn.edu.hfut.dmic.webcollector.fetcher;
 
 import cn.edu.hfut.dmic.webcollector.crawldb.DBManager;
 import cn.edu.hfut.dmic.webcollector.crawldb.Generator;
+import cn.edu.hfut.dmic.webcollector.crawldb.GeneratorFilter;
+import cn.edu.hfut.dmic.webcollector.conf.CommonConfigured;
 import cn.edu.hfut.dmic.webcollector.model.CrawlDatum;
 import cn.edu.hfut.dmic.webcollector.model.CrawlDatums;
-import cn.edu.hfut.dmic.webcollector.util.Config;
 
 import java.io.IOException;
 import java.util.Collections;
@@ -30,6 +31,7 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
+import cn.edu.hfut.dmic.webcollector.util.ConfigurationUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -38,22 +40,21 @@ import org.slf4j.LoggerFactory;
  *
  * @author hu
  */
-public class Fetcher {
+public class Fetcher extends CommonConfigured{
 
     public static final Logger LOG = LoggerFactory.getLogger(Fetcher.class);
 
     public DBManager dbManager;
 
     public Executor executor;
+    public NextFilter nextFilter = null;
 
     private AtomicInteger activeThreads;
     private AtomicInteger startedThreads;
     private AtomicInteger spinWaiting;
     private AtomicLong lastRequestStart;
-    private QueueFeeder feeder;
-    private FetchQueue fetchQueue;
-    private long executeInterval = 0;
-
+    private QueueFeeder feeder = null;
+    private FetchQueue fetchQueue = null;
 
     /**
      *
@@ -75,7 +76,6 @@ public class Fetcher {
         this.executor = executor;
     }
 
-  
     /**
      *
      */
@@ -131,17 +131,19 @@ public class Fetcher {
 
         public FetchQueue queue;
 
-        public Generator generator;
-
+        public DBManager dbManager;
+        public Generator generator = null;
+        public GeneratorFilter generatorFilter = null;
         public int size;
 
-        public QueueFeeder(FetchQueue queue, Generator generator, int size) {
+        public QueueFeeder(FetchQueue queue, DBManager dbManager, GeneratorFilter generatorFilter, int size) {
             this.queue = queue;
-            this.generator = generator;
+            this.dbManager = dbManager;
+            this.generatorFilter = generatorFilter;
             this.size = size;
         }
 
-        public void stopFeeder() {
+        public void stopFeeder(){
             running = false;
             while (this.isAlive()) {
                 try {
@@ -152,10 +154,22 @@ public class Fetcher {
             }
         }
 
-        public boolean running = true;
+        public void closeGenerator() throws Exception {
+            if(generator!=null) {
+                generator.close();
+                LOG.info("close generator:" + generator.getClass().getName());
+            }
+        }
+
+        public volatile boolean running = true;
 
         @Override
-        public void run() {
+        public void run(){
+
+            generator = dbManager.createGenerator(generatorFilter);
+            LOG.info("create generator:" + generator.getClass().getName());
+            String generatorFilterClassName = (generatorFilter==null)?"null":generatorFilter.getClass().getName();
+            LOG.info("use generatorFilter:" + generatorFilterClassName);
 
             boolean hasMore = true;
             running = true;
@@ -226,10 +240,20 @@ public class Fetcher {
                         CrawlDatums next = new CrawlDatums();
                         try {
                             executor.execute(crawlDatum, next);
-                            LOG.info("done: " + crawlDatum.key());
+                            if (nextFilter != null) {
+                                CrawlDatums filteredNext = new CrawlDatums();
+                                for (int i = 0; i < next.size(); i++) {
+                                    CrawlDatum filterResult = nextFilter.filter(next.get(i), crawlDatum);
+                                    if (filterResult != null) {
+                                        filteredNext.add(filterResult);
+                                    }
+                                }
+                                next = filteredNext;
+                            }
+                            LOG.info("done: " + crawlDatum.briefInfo());
                             crawlDatum.setStatus(CrawlDatum.STATUS_DB_SUCCESS);
                         } catch (Exception ex) {
-                            LOG.info("failed: " + crawlDatum.key(), ex);
+                            LOG.info("failed: " + crawlDatum.briefInfo(), ex);
                             crawlDatum.setStatus(CrawlDatum.STATUS_DB_FAILED);
                         }
 
@@ -243,6 +267,7 @@ public class Fetcher {
                         } catch (Exception ex) {
                             LOG.info("Exception when updating db", ex);
                         }
+                        long executeInterval = getConf().getExecuteInterval();
                         if (executeInterval > 0) {
                             try {
                                 Thread.sleep(executeInterval);
@@ -269,31 +294,27 @@ public class Fetcher {
     /**
      * 抓取当前所有任务，会阻塞到爬取完成
      *
-     * @param generator 给抓取提供任务的Generator(抓取任务生成器)
      * @throws IOException 异常
      */
-    public void fetchAll(Generator generator) throws Exception {
+    public int fetchAll(GeneratorFilter generatorFilter) throws Exception {
         if (executor == null) {
             LOG.info("Please Specify A Executor!");
-            return;
+            return 0;
         }
-        
-         dbManager.merge();
+
+        dbManager.merge();
 
         try {
-            generator.open();
-            LOG.info("open generator:" + generator.getClass().getName());
             dbManager.initSegmentWriter();
             LOG.info("init segmentWriter:" + dbManager.getClass().getName());
             running = true;
-
             lastRequestStart = new AtomicLong(System.currentTimeMillis());
 
             activeThreads = new AtomicInteger(0);
             startedThreads = new AtomicInteger(0);
             spinWaiting = new AtomicInteger(0);
             fetchQueue = new FetchQueue();
-            feeder = new QueueFeeder(fetchQueue, generator, 1000);
+            feeder = new QueueFeeder(fetchQueue, dbManager, generatorFilter, 1000);
             feeder.start();
 
             FetcherThread[] fetcherThreads = new FetcherThread[threads];
@@ -315,7 +336,7 @@ public class Fetcher {
                     fetchQueue.dump();
                 }
 
-                if ((System.currentTimeMillis() - lastRequestStart.get()) > Config.THREAD_KILLER) {
+                if ((System.currentTimeMillis() - lastRequestStart.get()) > getConf().getThreadKiller()) {
                     LOG.info("Aborting with " + activeThreads + " hung threads.");
                     break;
                 }
@@ -333,7 +354,7 @@ public class Fetcher {
                     Thread.sleep(500);
                 } catch (Exception ex) {
                 }
-                if (System.currentTimeMillis() - waitThreadEndStartTime > Config.WAIT_THREAD_END_TIME) {
+                if (System.currentTimeMillis() - waitThreadEndStartTime > getConf().getWaitThreadEndTime()) {
                     LOG.info("kill threads");
                     for (int i = 0; i < fetcherThreads.length; i++) {
                         if (fetcherThreads[i].isAlive()) {
@@ -352,11 +373,13 @@ public class Fetcher {
             feeder.stopFeeder();
             fetchQueue.clear();
         } finally {
-            generator.close();
-            LOG.info("close generator:" + generator.getClass().getName());
+            if(feeder!=null) {
+                feeder.closeGenerator();
+            }
             dbManager.closeSegmentWriter();
-            LOG.info("close segmentwriter:" + dbManager.getClass().getName());
+            LOG.info("close segmentWriter:" + dbManager.getClass().getName());
         }
+        return feeder.generator.getTotalGenerate();
     }
 
     volatile boolean running;
@@ -394,12 +417,15 @@ public class Fetcher {
         this.dbManager = dbManager;
     }
 
-    public long getExecuteInterval() {
-        return executeInterval;
+
+    public NextFilter getNextFilter() {
+        return nextFilter;
     }
 
-    public void setExecuteInterval(long executeInterval) {
-        this.executeInterval = executeInterval;
+    public void setNextFilter(NextFilter nextFilter) {
+        this.nextFilter = nextFilter;
     }
+    
+    
 
 }

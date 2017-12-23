@@ -17,29 +17,29 @@
  */
 package cn.edu.hfut.dmic.webcollector.model;
 
-import java.util.ArrayList;
+import com.google.gson.JsonObject;
+
 import java.util.Collection;
 import java.util.Iterator;
+import java.util.LinkedList;
 
 /**
  * 用于存储多个CrawlDatum的数据结构
  *
  * @author hu
  */
-public class CrawlDatums implements Iterable<CrawlDatum> {
+public class CrawlDatums implements Iterable<CrawlDatum>, MetaSetter<CrawlDatums> {
 
-    protected ArrayList<CrawlDatum> dataList = new ArrayList<CrawlDatum>();
+    protected LinkedList<CrawlDatum> dataList = new LinkedList<CrawlDatum>();
 
     public CrawlDatums() {
     }
 
-    
-
-    public CrawlDatums(Links links, String type) {
+    public CrawlDatums(Iterable<String> links, String type) {
         add(links, type);
     }
     
-    public CrawlDatums(Links links) {
+    public CrawlDatums(Iterable<String> links) {
         add(links);
     }
 
@@ -73,20 +73,56 @@ public class CrawlDatums implements Iterable<CrawlDatum> {
         return this;
     }
 
-    public CrawlDatums add(Links links, String type) {
+    public CrawlDatums add(Iterable<String> links, String type) {
         for (String link : links) {
             add(link, type);
         }
         return this;
     }
 
-    public CrawlDatums add(Links links) {
+    public CrawlDatums add(Iterable<String> links) {
         for (String link : links) {
             add(link);
         }
         return this;
     }
 
+    public CrawlDatum addAndReturn(String url){
+        CrawlDatum datum = new CrawlDatum(url);
+        add(datum);
+        return datum;
+    }
+
+    public CrawlDatums addAndReturn(Iterable<String> links){
+        CrawlDatums datums = new CrawlDatums(links);
+        add(datums);
+        return datums;
+    }
+
+    public CrawlDatums addAndReturn(CrawlDatums datums){
+        add(datums);
+        return datums;
+    }
+
+//    public CrawlDatums addWithKey(String key, CrawlDatum datum){
+//        datum.key(key);
+//        return add(datum);
+//    }
+//
+//    public CrawlDatums addWithKey(String key, CrawlDatum datum, String type){
+//        datum.key(key).type(type);
+//        return add(datum);
+//    }
+
+    @Override
+    public CrawlDatums meta(JsonObject metaData) {
+        for(CrawlDatum datum:dataList){
+            datum.meta(metaData);
+        }
+        return this;
+    }
+
+    @Override
     public CrawlDatums meta(String key, String value) {
         for (CrawlDatum datum : dataList) {
             datum.meta(key, value);
@@ -94,10 +130,38 @@ public class CrawlDatums implements Iterable<CrawlDatum> {
         return this;
     }
 
-    @Deprecated
-    public CrawlDatums putMetaData(String key, String value) {
-        return meta(key, value);
+    @Override
+    public CrawlDatums meta(String key, int value) {
+        for (CrawlDatum datum : dataList) {
+            datum.meta(key, value);
+        }
+        return this;
     }
+
+    @Override
+    public CrawlDatums meta(String key, boolean value) {
+        for (CrawlDatum datum : dataList) {
+            datum.meta(key, value);
+        }
+        return this;
+    }
+
+    @Override
+    public CrawlDatums meta(String key, double value) {
+        for (CrawlDatum datum : dataList) {
+            datum.meta(key, value);
+        }
+        return this;
+    }
+
+    @Override
+    public CrawlDatums meta(String key, long value) {
+        for (CrawlDatum datum : dataList) {
+            datum.meta(key, value);
+        }
+        return this;
+    }
+
 
     @Override
     public Iterator<CrawlDatum> iterator() {

@@ -48,14 +48,15 @@ public class TutorialCrawler extends BreadthCrawler {
     public TutorialCrawler(String crawlPath, boolean autoParse) {
         super(crawlPath, autoParse);
         
-        addSeed("http://blog.csdn.net/.*");
+        addSeed("http://blog.csdn.net/");
         addRegex("http://blog.csdn.net/.*/article/details/.*");
         
         //需要抓取图片时设置为true，并加入图片的正则规则
-        //setParseImg(true);
+//        setParseImg(true);
         
         //设置每个线程的抓取间隔（毫秒）
-        //setExecuteInterval(1000);
+//        setExecuteInterval(1000);
+        getConf().setExecuteInterval(1000);
         
         //设置线程数
         setThreads(30);
